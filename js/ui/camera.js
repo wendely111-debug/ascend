@@ -12,7 +12,7 @@ const fmtDate = (d) => d.toLocaleString('pt-BR', { day: '2-digit', month: '2-dig
 function cameraError(err) {
   if (!window.isSecureContext) return 'A câmera só funciona em conexão segura (HTTPS).';
   if (err?.name === 'NotAllowedError') return 'Permissão da câmera negada. Libere o acesso à câmera nas configurações do navegador.';
-  if (err?.name === 'NotFoundError' || err?.name === 'OverconstrainedError') return 'Nenhuma câmera encontrada neste aparelho.';
+  if (err?.name === 'NotFoundError' || err?.name === 'OverconstrainedError') return 'Nenhuma câmera encontrada neste aparelho. A prova ao vivo precisa de câmera: abra o ASCEND no celular (mesma conta) para enviar.';
   if (err?.name === 'NotReadableError') return 'A câmera está em uso por outro app. Feche-o e tente de novo.';
   return 'Não foi possível abrir a câmera.';
 }
