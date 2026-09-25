@@ -21,6 +21,12 @@ const EVENTS = {
   review_given: ['eye', 'Você auditou um aliado'],
   review_received: ['guild', 'Auditoria recebida'],
   ally_accepted: ['guild', 'Aliança formada'],
+  guild_created: ['shield', 'Guild criada'],
+  guild_joined: ['guild', 'Entrou numa guild'],
+  guild_left: ['logout', 'Saiu da guild'],
+  guild_kick: ['x', 'Removeu um membro da guild'],
+  guild_kicked: ['x', 'Foi removido da guild'],
+  guild_invite_reset: ['refresh', 'Link de convite trocado'],
   backup_imported: ['upload', 'Backup importado'],
 };
 

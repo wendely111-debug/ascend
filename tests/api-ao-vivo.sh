@@ -37,5 +37,13 @@ for f in my_totals:'{}' friend_leaderboard:'{"p_since":"2026-09-21"}' send_frien
   add_assessment:'{"p":{},"p_proof":null}' review_queue:'{}' review_activity:"{\"p_activity\":\"$Z\",\"p_verdict\":\"approve\",\"p_reason\":null}"; do
   w "rpc/${f%%:*}" "${f#*:}"
 done
+# guilds: prévia do convite funciona sem login (código inexistente → null); o resto exige login
+r=$(curl -s -w ' %{http_code}' -X POST -H "apikey: $K" -H 'Content-Type: application/json' -d '{"p_code":"NAOEXISTE0"}' "$U/rpc/guild_preview"); ok
+[ "${r##* }" = "200" ] || { echo "FAIL guild_preview → ${r:0:160}"; bad=$((bad+1)); }
+for f in create_guild:'{"p_name":"x","p_tag":"XX","p_emblem":"wolf"}' join_guild:'{"p_code":"X"}' leave_guild:'{}' \
+  kick_member:"{\"p_user\":\"$Z\"}" regenerate_invite:'{}' update_guild:'{"p_name":"x","p_tag":"XX","p_emblem":"wolf"}' \
+  my_guild:'{"p_since":"2026-09-21"}'; do w "rpc/${f%%:*}" "${f#*:}"; done
+q guilds "guilds?select=*&limit=1"
+q membros "guild_members?select=*&limit=1"
 echo "$((n-bad)) OK · $bad FALHAS (API em produção)"
 [ "$bad" = "0" ]

@@ -11,7 +11,7 @@ import { createMotionTracker } from './motion.js';
 import { analyze, planDay } from './nutrition.js';
 import { renderStatus } from './views/status.js';
 import { renderQuests, questForm, workoutForm } from './views/quests.js';
-import { renderGuild } from './views/guild.js';
+import { renderGuild, guildForm, inviteModal, inviteUrl, inviteText } from './views/guild.js';
 import { renderAchievements } from './views/achievements.js';
 import { renderAuth, renderOnboarding, profileFields } from './views/auth.js';
 import {
@@ -59,7 +59,7 @@ const state = {
   allyCount: 0,
   view: 'status',
   pending: new Set(),
-  guild: { tab: 'ranking', period: 'week', loaded: false, loading: false, error: '', board: [], feed: [], fr: null },
+  guild: { tab: 'guild', my: null, period: 'week', loaded: false, loading: false, error: '', board: [], feed: [], fr: null },
   routines: [],
   training: { tab: 'fichas', ...libDefaults() },
   picker: null,
@@ -86,6 +86,31 @@ function loadLocal(key, fallback) {
 }
 
 const app = $('#app');
+
+// ---- Convite de guild (?convite=CODIGO) — guardado até a pessoa entrar/criar conta
+const INVITE_KEY = 'ascend:invite';
+const pendingInvite = () => { try { return localStorage.getItem(INVITE_KEY); } catch { return null; } };
+const savePendingInvite = (c) => { try { localStorage.setItem(INVITE_KEY, c); } catch { /* sem storage */ } };
+const clearInvite = () => { try { localStorage.removeItem(INVITE_KEY); } catch { /* sem storage */ } };
+{
+  const params = new URLSearchParams(location.search);
+  const code = params.get('convite');
+  if (code && /^[A-Za-z0-9]{6,20}$/.test(code)) {
+    savePendingInvite(code.toUpperCase());
+    params.delete('convite');
+    history.replaceState(null, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash);
+  }
+}
+
+async function showInvite() {
+  const code = pendingInvite();
+  if (!code || state.store?.mode !== 'online' || state.phase !== 'app') return;
+  const p = await state.store.guildPreview(code).catch(() => null);
+  if (!p) { clearInvite(); toast('Convite inválido ou expirado. Peça um link novo ao líder.', { type: 'error', title: 'GUILD' }); return; }
+  const current = state.guild.my ?? await state.store.myGuild(weekStart()).catch(() => null);
+  if (current?.id === p.id) { clearInvite(); toast(`Você já faz parte de <b>[${esc(p.tag)}] ${esc(p.name)}</b>.`, { title: 'GUILD' }); return; }
+  openModal(inviteModal(p, current));
+}
 let motion = null; // sensor de movimento da sessão
 let wakeLock = null;
 
@@ -217,17 +242,17 @@ async function loadGuild() {
   if (state.store.mode !== 'online' || g.loading) return;
   g.loading = true; g.error = ''; render();
   try {
-    const [board, feed, fr] = await Promise.allSettled([
-      state.store.leaderboard(weekStart()), state.store.feed(), state.store.friendships(),
+    const [board, feed, fr, my] = await Promise.allSettled([
+      state.store.leaderboard(weekStart()), state.store.feed(), state.store.friendships(), state.store.myGuild(weekStart()),
     ]);
     const val = (r, fallback) => (r.status === 'fulfilled' ? r.value : fallback);
     Object.assign(g, {
-      board: val(board, []), feed: val(feed, []), fr: val(fr, { allies: [], incoming: [], outgoing: [] }), loaded: true,
-      errors: { ranking: board.reason?.message, feed: feed.reason?.message, allies: fr.reason?.message },
+      board: val(board, []), feed: val(feed, []), fr: val(fr, { allies: [], incoming: [], outgoing: [] }), my: val(my, null), loaded: true,
+      errors: { ranking: board.reason?.message, feed: feed.reason?.message, allies: fr.reason?.message, guild: my.reason?.message },
     });
     state.allyCount = g.fr.allies.length;
-    const failed = [board, feed, fr].filter((r) => r.status === 'rejected');
-    if (failed.length === 3) g.error = failed[0].reason?.message ?? 'Falha ao carregar a guilda.';
+    const failed = [board, feed, fr, my].filter((r) => r.status === 'rejected');
+    if (failed.length === 4) g.error = failed[0].reason?.message ?? 'Falha ao carregar a guilda.';
   } catch (e) {
     g.error = e.message;
   } finally {
@@ -257,7 +282,7 @@ function render() {
     app.innerHTML = `<div class="boot"><div class="boot-logo">${icon('bolt')}</div><div class="boot-text">INICIALIZANDO SISTEMA<span class="dots"></span></div></div>`;
     return;
   }
-  if (state.phase === 'auth') { app.innerHTML = renderAuth({ tab: state.authTab, msg: state.authMsg }); return; }
+  if (state.phase === 'auth') { app.innerHTML = renderAuth({ tab: state.authTab, msg: state.authMsg, invite: state.invitePreview }); return; }
   if (state.phase === 'onboarding') { app.innerHTML = renderOnboarding({ msg: state.authMsg }); return; }
   if (state.phase === 'assessment') { app.innerHTML = renderWizard(state.wiz, { full: true }); return; }
 
@@ -715,6 +740,7 @@ async function saveWizard() {
   state.diet.tab = w.mode === 'initial' ? 'hoje' : 'avaliacao';
   window.scrollTo(0, 0);
   render();
+  showInvite();
 }
 
 function openProfile() {
@@ -1077,6 +1103,54 @@ const actions = {
     saveDiet(); closeModal(); render();
   },
 
+  // --- Guild
+  'guild-share': async () => {
+    const g = state.guild.my;
+    const link = inviteUrl(g.invite_code);
+    try {
+      if (navigator.share) await navigator.share({ title: `Guild [${g.tag}] ${g.name}`, text: inviteText(g, link) });
+      else { await navigator.clipboard.writeText(link); toast('Link copiado.', { title: 'GUILD' }); }
+    } catch { /* compartilhamento cancelado */ }
+  },
+  'guild-copy': async () => {
+    try { await navigator.clipboard.writeText(inviteUrl(state.guild.my.invite_code)); toast('Link de convite copiado.', { title: 'GUILD' }); }
+    catch { toast('Não foi possível copiar — selecione o link e copie manualmente.', { type: 'error' }); }
+  },
+  'guild-reset-invite': async () => {
+    if (!(await confirmDialog('Gerar um novo link? <b>O link atual para de funcionar</b> para quem ainda não entrou.', { ok: 'Gerar novo', danger: true }))) return;
+    state.guild.my.invite_code = await state.store.regenerateInvite();
+    render();
+    toast('Novo link de convite gerado.', { title: 'GUILD' });
+  },
+  'guild-kick': async (el) => {
+    if (!(await confirmDialog(`Remover <b>${esc(el.dataset.name)}</b> da guild?`, { ok: 'Remover', danger: true }))) return;
+    await state.store.kickMember(el.dataset.id);
+    await loadGuild();
+  },
+  'guild-leave': async () => {
+    const g = state.guild.my;
+    const alone = g.members.length === 1;
+    const msg = g.my_role === 'lider'
+      ? (alone ? 'Você é o único membro: <b>a guild será apagada</b>.' : 'Você é o líder: a liderança passa para o membro mais antigo.')
+      : 'Seus aliados da guild deixam de ver suas atividades.';
+    if (!(await confirmDialog(`Sair da guild <b>[${esc(g.tag)}] ${esc(g.name)}</b>? ${msg}`, { ok: 'Sair', danger: true }))) return;
+    await state.store.leaveGuild();
+    await loadGuild();
+    toast('Você saiu da guild.', { title: 'GUILD' });
+  },
+  'guild-edit': () => openModal(`<h3 class="modal-title">Editar guild</h3>${guildForm(state.guild.my)}`),
+  'invite-accept': async () => {
+    const code = pendingInvite();
+    const g = await state.store.joinGuild(code);
+    clearInvite();
+    closeModal();
+    state.view = 'guild';
+    state.guild.tab = 'guild';
+    await loadGuild();
+    toast(`Bem-vindo à guild <b>[${esc(g.tag)}] ${esc(g.name)}</b>!`, { title: 'GUILD', type: 'gold', ms: 5000 });
+  },
+  'invite-dismiss': () => { clearInvite(); closeModal(); },
+
   // --- Perfil
   profile: openProfile,
   'health-delete': async () => {
@@ -1201,6 +1275,25 @@ const forms = {
     toast(`${esc(s.name)} · ${sets} séries · ${act.meta.minutes} min ${describeResult(act)}`, { title: 'TREINO CONCLUÍDO', type: 'gold', ms: 6000 });
   },
   profile: saveProfile,
+  'guild-create': async (form) => {
+    const f = new FormData(form);
+    const g = await state.store.createGuild(String(f.get('name')).trim(), String(f.get('tag')).trim().toUpperCase(), f.get('emblem'));
+    await loadGuild();
+    toast(`Guild <b>[${esc(g.tag)}] ${esc(g.name)}</b> criada! Agora envie o link de convite para os amigos.`, { title: 'GUILD', type: 'gold', ms: 5000 });
+  },
+  'guild-edit': async (form) => {
+    const f = new FormData(form);
+    await state.store.updateGuild(String(f.get('name')).trim(), String(f.get('tag')).trim().toUpperCase(), f.get('emblem'));
+    closeModal();
+    await loadGuild();
+    toast('Guild atualizada.', { title: 'GUILD' });
+  },
+  'guild-join-code': async (form) => {
+    const raw = String(new FormData(form).get('code')).trim();
+    const code = (raw.match(/convite=([A-Za-z0-9]+)/)?.[1] ?? raw).toUpperCase();
+    savePendingInvite(code);
+    await showInvite();
+  },
   checkin: async (form) => {
     const f = new FormData(form);
     const data = {
@@ -1413,6 +1506,7 @@ async function afterLogin() {
     state.phase = 'assessment';
   } else state.phase = 'app';
   render();
+  if (state.phase === 'app') showInvite();
 }
 
 async function boot() {
@@ -1420,7 +1514,12 @@ async function boot() {
   try {
     state.store = await createStore();
     const session = await state.store.session();
-    if (!session) { state.phase = 'auth'; render(); return; }
+    if (!session) {
+      state.phase = 'auth';
+      if (pendingInvite()) { state.invitePreview = await state.store.guildPreview(pendingInvite()).catch(() => null); state.authTab = 'up'; }
+      render();
+      return;
+    }
     await afterLogin();
   } catch (err) {
     app.innerHTML = `<div class="boot"><div class="boot-text error">FALHA NO SISTEMA</div><p class="muted">${esc(err.message)}</p>

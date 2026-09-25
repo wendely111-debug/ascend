@@ -788,6 +788,28 @@ button.st[disabled] { cursor: default; }
 .exam-list li { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid rgba(0,229,255,.06); }
 .exam-list .lvl { flex: none; white-space: nowrap; }
 
+.g-emblem { display: inline-grid; place-items: center; width: 48px; height: 48px; flex: none; color: var(--gold);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: radial-gradient(circle at 50% 40%, rgba(255,197,61,.35), rgba(4,8,18,.95) 70%); box-shadow: inset 0 0 0 2px var(--gold); }
+.g-emblem .ico { width: 50%; height: 50%; filter: drop-shadow(0 0 6px var(--gold)); }
+.g-emblem.big { width: 76px; height: 76px; }
+.guild-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; border-color: rgba(255,197,61,.45); }
+.guild-id { flex: 1; min-width: 0; }
+.guild-name { font: 900 1.3rem var(--font-hud); letter-spacing: .03em; }
+.guild-week { display: grid; justify-items: end; }
+.guild-week b { font-size: 1.6rem; color: var(--gold); text-shadow: 0 0 12px rgba(255,197,61,.5); }
+.guild-week span { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.invite-box { overflow: hidden; }
+.invite-link { font-size: .85rem; overflow-wrap: anywhere; color: #fff; }
+.wa-btn { --c: #25d366; }
+.crown { color: var(--gold); display: inline-grid; vertical-align: middle; }
+.crown .ico { width: 14px; height: 14px; }
+.kick { width: 28px; height: 28px; margin-left: 4px; }
+.invite-modal { display: grid; justify-items: center; text-align: center; gap: 8px; }
+.invite-modal .alert { text-align: left; }
+.invite-hint { margin-bottom: 12px; }
+@media (max-width: 420px) { .guild-week { justify-items: start; width: 100%; } }
+
 /* ---- Dieta ------------------------------------------------------------------------------------- */
 .targets { display: grid; gap: 10px; margin-bottom: 14px; }
 .mbar-head { display: flex; justify-content: space-between; font-size: .9rem; font-weight: 600; margin-bottom: 4px; }

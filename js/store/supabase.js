@@ -23,6 +23,14 @@ const ERRORS = [
   [/consent_required/i, 'É preciso consentir com o tratamento dos dados de saúde.'],
   [/not_allowed/i, 'Você só pode auditar atividades de aliados.'],
   [/review_closed/i, 'Esta atividade não está mais aberta para auditoria.'],
+  [/already_in_guild/i, 'Você já está em uma guild. Saia dela para criar ou entrar em outra.'],
+  [/invite_invalid/i, 'Convite inválido ou expirado. Peça um link novo ao líder.'],
+  [/guild_full/i, 'Essa guild está cheia (limite de membros).'],
+  [/not_leader/i, 'Só o líder da guild pode fazer isso.'],
+  [/not_in_guild/i, 'Você não está em nenhuma guild.'],
+  [/guilds_name_key/i, 'Já existe uma guild com esse nome.'],
+  [/guilds_tag_check/i, 'A TAG deve ter de 2 a 5 letras ou números.'],
+  [/guilds_name_check/i, 'O nome da guild deve ter de 3 a 30 caracteres.'],
   [/rate_limited|rate limit/i, 'Muitas tentativas. Aguarde um pouco.'],
   [/failed to fetch|network/i, 'Sem conexão com o servidor.'],
 ];
@@ -213,6 +221,16 @@ export async function createSupabaseStore({ url, key }) {
       return res;
     },
     sendFriendRequest: (code) => rpc('send_friend_request', { p_code: code }),
+
+    // ---- guilds
+    myGuild: (since) => rpc('my_guild', { p_since: since }),
+    guildPreview: (code) => rpc('guild_preview', { p_code: code }),
+    createGuild: (name, tag, emblem) => rpc('create_guild', { p_name: name, p_tag: tag, p_emblem: emblem }),
+    joinGuild: (code) => rpc('join_guild', { p_code: code }),
+    leaveGuild: () => rpc('leave_guild'),
+    kickMember: (userId) => rpc('kick_member', { p_user: userId }),
+    regenerateInvite: () => rpc('regenerate_invite'),
+    updateGuild: (name, tag, emblem) => rpc('update_guild', { p_name: name, p_tag: tag, p_emblem: emblem }),
     async acceptFriend(otherId) {
       unwrap(await sb.from('friendships').update({ status: 'accepted' }).eq('requester', otherId).eq('addressee', uid));
     },

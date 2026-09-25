@@ -4,10 +4,12 @@ import { AVATARS, icon } from '../ui/icons.js';
 
 const logo = `<div class="logo"><span class="logo-mark">${icon('bolt')}</span><span class="logo-text">ASCEND</span></div>`;
 
-export function renderAuth({ tab = 'in', msg = '' } = {}) {
+export function renderAuth({ tab = 'in', msg = '', invite = null } = {}) {
   return `<main class="auth">
     <div class="auth-box panel">
       ${logo}
+      ${invite ? `<div class="alert alert-info invite-hint">${icon('guild')}<p>Você foi convidado para a guild <b>[${esc(invite.tag)}] ${esc(invite.name)}</b>.
+        ${tab === 'in' ? 'Entre' : 'Crie sua conta'} para aceitar o convite.</p></div>` : ''}
       <p class="auth-tag">[ SISTEMA ] Você foi escolhido como <b>Jogador</b>.<br>Aceita o desafio de evoluir?</p>
       <nav class="tabs">
         <button class="tab ${tab === 'in' ? 'active' : ''}" data-act="auth-tab" data-tab="in">Entrar</button>

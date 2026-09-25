@@ -4,8 +4,9 @@ import { avatar, rankBadge } from '../ui/components.js';
 import { icon } from '../ui/icons.js';
 import { trustBadge } from './audit.js';
 import { statusBadge } from './diet.js';
+import { AVATARS } from '../ui/icons.js';
 
-const TABS = [['ranking', 'Ranking'], ['feed', 'Feed'], ['allies', 'Aliados']];
+const TABS = [['guild', 'Minha guild'], ['ranking', 'Ranking'], ['feed', 'Feed'], ['allies', 'Aliados']];
 
 export function renderGuild({ state }) {
   if (state.store.mode === 'local') return offlinePanel();
@@ -21,9 +22,9 @@ export function renderGuild({ state }) {
   if (g.error) body = `<p class="panel error-box">${esc(g.error)}</p>`;
   else if (!g.loaded) body = `<div class="panel skeleton"></div><div class="panel skeleton"></div>`;
   else {
-    const err = g.errors?.[g.tab === 'allies' ? 'allies' : g.tab];
+    const err = g.errors?.[g.tab];
     body = err ? `<p class="panel error-box">Não foi possível carregar esta aba: ${esc(err)}. Toque em atualizar.</p>`
-      : g.tab === 'ranking' ? ranking(state) : g.tab === 'feed' ? feed(g.feed) : allies(state);
+      : g.tab === 'guild' ? myGuild(state) : g.tab === 'ranking' ? ranking(state) : g.tab === 'feed' ? feed(g.feed) : allies(state);
   }
 
   return `<section class="view-guild">
@@ -115,4 +116,103 @@ function offlinePanel() {
       </ol>
       <p class="muted small">O passo a passo completo está no <code>README.md</code>. Dica: antes de trocar para online, use Perfil → Exportar para salvar um backup.</p>
     </article></section>`;
+}
+
+// ---------------- Minha guild ----------------
+export const inviteUrl = (code) => `${location.origin}${location.pathname}?convite=${code}`;
+
+export function emblem(name, cls = '') {
+  return `<span class="g-emblem ${cls}">${icon(name || 'shield')}</span>`;
+}
+
+const emblemPicker = (current = 'shield') => `<fieldset><legend>Emblema</legend><div class="avatar-grid">
+  ${AVATARS.map((a) => `<label class="avatar-opt"><input type="radio" name="emblem" value="${a}" ${a === current ? 'checked' : ''}><span>${icon(a)}</span></label>`).join('')}
+  </div></fieldset>`;
+
+export function guildForm(g = {}) {
+  return `<form class="form" data-form="${g.id ? 'guild-edit' : 'guild-create'}">
+    <label>Nome da guild<input name="name" required minlength="3" maxlength="30" value="${esc(g.name || '')}" placeholder="Ex.: Lobos de Campina"></label>
+    <label>TAG <small class="muted">(2 a 5 letras/números, aparece como [TAG])</small>
+      <input name="tag" required minlength="2" maxlength="5" pattern="[A-Za-z0-9]{2,5}" value="${esc(g.tag || '')}" placeholder="CGPB" class="mono upper"></label>
+    ${emblemPicker(g.emblem)}
+    <button class="btn" type="submit">${icon(g.id ? 'check' : 'plus')} ${g.id ? 'Salvar guild' : 'Criar guild'}</button>
+  </form>`;
+}
+
+function myGuild(state) {
+  const g = state.guild.my;
+  if (!g) {
+    return `<div class="grid grid-2">
+      <article class="panel">
+        <h2 class="panel-title">${icon('shield')} Criar uma guild</h2>
+        <p class="muted small">Monte seu time: você vira o líder e ganha um link de convite para chamar os amigos.</p>
+        ${guildForm()}
+      </article>
+      <article class="panel">
+        <h2 class="panel-title">${icon('guild')} Recebeu um convite?</h2>
+        <p class="muted small">Cole o link que te mandaram (ou só o código).</p>
+        <form class="form" data-form="guild-join-code">
+          <input name="code" required placeholder="https://…/ascend/?convite=… ou código" autocomplete="off">
+          <button class="btn btn-ghost" type="submit">Ver convite</button>
+        </form>
+        <div class="alert alert-info">${icon('eye')}<p>Membros da mesma guild viram <b>aliados</b>: veem as atividades uns dos outros, disputam o ranking e auditam as provas.</p></div>
+      </article>
+    </div>`;
+  }
+  const leader = g.my_role === 'lider';
+  const week = g.members.reduce((s, m) => s + Number(m.period_xp), 0);
+  const link = inviteUrl(g.invite_code);
+  return `<article class="panel guild-head">
+      ${emblem(g.emblem, 'big')}
+      <div class="guild-id"><div class="kicker">[ ${esc(g.tag)} ]</div><h2 class="guild-name">${esc(g.name)}</h2>
+        <div class="muted small">${g.members.length}/${g.max_members} membros · você é <b>${leader ? 'líder' : 'membro'}</b></div></div>
+      <div class="guild-week"><b class="mono">${fmt(week)}</b><span>XP da guild na semana</span></div>
+    </article>
+    <article class="panel">
+      <h2 class="panel-title">${icon('bolt')} Convidar amigos</h2>
+      <div class="code-box invite-box"><span class="mono invite-link">${esc(link)}</span></div>
+      <div class="btn-row">
+        <button class="btn btn-sm" data-act="guild-share">${icon('upload')} Compartilhar</button>
+        <a class="btn btn-sm btn-ghost wa-btn" href="https://wa.me/?text=${encodeURIComponent(inviteText(g, link))}" target="_blank" rel="noopener">WhatsApp</a>
+        <button class="btn btn-sm btn-ghost" data-act="guild-copy">${icon('copy')} Copiar link</button>
+        ${leader ? `<button class="btn btn-sm btn-ghost btn-danger" data-act="guild-reset-invite">${icon('refresh')} Gerar novo link</button>` : ''}
+      </div>
+      <p class="muted small">Quem abrir o link cria a conta (ou entra) e aceita o convite. ${leader ? 'Gerar um novo link desativa o anterior.' : ''}</p>
+    </article>
+    <article class="panel">
+      <h2 class="panel-title">${icon('trophy')} Ranking da guild · semana</h2>
+      <ol class="board">${g.members.map((m, i) => {
+        const lv = levelInfo(Number(m.total_xp)).level;
+        const me = m.user_id === state.profile.id;
+        return `<li class="board-row ${me ? 'me' : ''} ${['gold', 'silver', 'bronze'][i] || ''}">
+          <span class="board-pos">${i + 1}</span>${avatar(m, 'sm')}
+          <span class="board-name">${esc(m.username)}${m.role === 'lider' ? ` <span class="crown" title="Líder">${icon('crown')}</span>` : ''}${me ? ' <small class="muted">(você)</small>' : ''}</span>
+          <span class="board-lv">${rankBadge(lv)} <span class="mono">LV ${lv}</span></span>
+          <span class="board-xp mono">${fmt(m.period_xp)}<small>XP</small></span>
+          <span class="board-trust">${trustBadge(m.trust)}${leader && !me ? ` <button class="icon-btn kick" data-act="guild-kick" data-id="${m.user_id}" data-name="${esc(m.username)}" aria-label="Remover">${icon('x')}</button>` : ''}</span></li>`;
+      }).join('')}</ol>
+    </article>
+    <div class="btn-row">
+      ${leader ? `<button class="btn btn-ghost btn-sm" data-act="guild-edit">${icon('edit')} Editar guild</button>` : ''}
+      <button class="btn btn-ghost btn-danger btn-sm" data-act="guild-leave">${icon('logout')} Sair da guild</button>
+    </div>`;
+}
+
+export function inviteText(g, link) {
+  return `⚔️ Entra na minha guild [${g.tag}] ${g.name} no ASCEND! Treino e dieta gamificados, ranking semanal e auditoria entre amigos. Aceita o convite: ${link}`;
+}
+
+/** Modal do convite recebido (antes de entrar). */
+export function inviteModal(p, currentGuild) {
+  return `<div class="invite-modal">
+    ${emblem(p.emblem, 'big')}
+    <div class="kicker">[ CONVITE DE GUILD ]</div>
+    <h3 class="ex-title">[${esc(p.tag)}] ${esc(p.name)}</h3>
+    <p class="muted">Líder: <b>${esc(p.leader)}</b> · ${p.members}/${p.max_members} membros</p>
+    ${currentGuild ? `<div class="alert alert-warn">${icon('eye')}<p>Você já está na guild <b>${esc(currentGuild.name)}</b>. Saia dela primeiro para entrar nesta.</p></div>`
+      : `<div class="alert alert-info">${icon('shield')}<p>Ao entrar, os membros viram seus <b>aliados</b>: veem suas atividades e fotos de prova, disputam o ranking e podem <b>auditar</b> suas provas. Você pode sair quando quiser.</p></div>`}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-act="invite-dismiss">Agora não</button>
+      ${currentGuild ? '' : `<button class="btn" data-act="invite-accept">${icon('check')} Entrar na guild</button>`}
+    </div></div>`;
 }
