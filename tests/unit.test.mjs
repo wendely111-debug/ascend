@@ -192,5 +192,11 @@ t('Guia: zonas de FC, Cooper e custo do whey', () => {
   assert.equal(w.purity, 80); near(w.per100, 16.67, 0.01);
 });
 
+t('Missões padrão: lote com as MESMAS colunas (PostgREST PGRST102)', () => {
+  const keys = DEFAULT_QUESTS.map((q, i) => Object.keys(questRow({ ...q, sort: i })).sort().join(','));
+  assert.equal(new Set(keys).size, 1, keys.join(' | '));
+  assert.equal(questRow(DEFAULT_QUESTS[4]).exercise_id, null);
+});
+
 console.log(`\n${ok} OK · ${fail} FALHAS (unitários)`);
 process.exit(fail ? 1 : 0);
