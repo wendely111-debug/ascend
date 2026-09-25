@@ -87,6 +87,28 @@ create table if not exists public.friendships (
 );
 create index if not exists friendships_addressee_idx on public.friendships(addressee);
 
+-- Guilds: grupos com link de convite. Membros da mesma guild são aliados entre si
+-- (veem atividades, disputam ranking e auditam provas uns dos outros).
+create table if not exists public.guilds (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null unique check (char_length(name) between 3 and 30),
+  tag         text not null check (tag ~ '^[A-Z0-9]{2,5}$'),
+  emblem      text not null default 'shield' check (char_length(emblem) <= 20),
+  owner_id    uuid not null references public.profiles on delete cascade,
+  invite_code text not null unique default upper(substr(md5(gen_random_uuid()::text), 1, 10)),
+  max_members int  not null default 30 check (max_members between 2 and 30),
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists public.guild_members (
+  guild_id  uuid not null references public.guilds on delete cascade,
+  user_id   uuid not null unique references public.profiles on delete cascade, -- 1 guild por pessoa
+  role      text not null default 'membro' check (role in ('lider','membro')),
+  joined_at timestamptz not null default now(),
+  primary key (guild_id, user_id)
+);
+create index if not exists guild_members_guild_idx on public.guild_members(guild_id);
+
 create table if not exists public.kudos (
   activity_id uuid not null references public.activities on delete cascade,
   user_id     uuid not null default auth.uid() references public.profiles on delete cascade,
@@ -217,10 +239,14 @@ on conflict (id) do nothing;
 
 create or replace function public.are_friends(a uuid, b uuid)
 returns boolean language sql stable security definer set search_path = public as $$
-  select exists (
-    select 1 from friendships
-    where status = 'accepted'
-      and ((requester = a and addressee = b) or (requester = b and addressee = a))
+  select a <> b and (
+    exists (
+      select 1 from friendships
+      where status = 'accepted'
+        and ((requester = a and addressee = b) or (requester = b and addressee = a)))
+    or exists (
+      select 1 from guild_members ga join guild_members gb on gb.guild_id = ga.guild_id
+      where ga.user_id = a and gb.user_id = b)
   );
 $$;
 
@@ -726,6 +752,124 @@ language sql stable security definer set search_path = public as $$
   group by p.id;
 $$;
 
+-- ---------- RPC: guilds ------------------------------------------------------
+
+-- Guild do usuário logado (usada nas políticas RLS sem recursão).
+create or replace function public.my_guild_id()
+returns uuid language sql stable security definer set search_path = public as $$
+  select guild_id from guild_members where user_id = auth.uid();
+$$;
+
+create or replace function public.create_guild(p_name text, p_tag text, p_emblem text default 'shield')
+returns guilds language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); g guilds;
+begin
+  if me is null then raise exception 'not_authenticated'; end if;
+  if exists (select 1 from guild_members where user_id = me) then raise exception 'already_in_guild'; end if;
+  insert into guilds(name, tag, emblem, owner_id)
+  values (trim(p_name), upper(trim(p_tag)), coalesce(nullif(p_emblem, ''), 'shield'), me) returning * into g;
+  insert into guild_members(guild_id, user_id, role) values (g.id, me, 'lider');
+  perform audit_event(me, 'guild_created', g.id::text, jsonb_build_object('name', g.name, 'tag', g.tag));
+  return g;
+end $$;
+
+-- Prévia do convite (pode ser vista antes do login, só com o código).
+create or replace function public.guild_preview(p_code text)
+returns json language sql stable security definer set search_path = public as $$
+  select json_build_object('id', g.id, 'name', g.name, 'tag', g.tag, 'emblem', g.emblem,
+           'members', (select count(*) from guild_members m where m.guild_id = g.id), 'max_members', g.max_members,
+           'leader', (select p.username from profiles p where p.id = g.owner_id))
+  from guilds g where g.invite_code = upper(trim(p_code));
+$$;
+
+create or replace function public.join_guild(p_code text)
+returns guilds language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); g guilds;
+begin
+  if me is null then raise exception 'not_authenticated'; end if;
+  select * into g from guilds where invite_code = upper(trim(p_code)) for update;
+  if not found then raise exception 'invite_invalid'; end if;
+  if exists (select 1 from guild_members where user_id = me and guild_id = g.id) then return g; end if;
+  if exists (select 1 from guild_members where user_id = me) then raise exception 'already_in_guild'; end if;
+  if (select count(*) from guild_members where guild_id = g.id) >= g.max_members then raise exception 'guild_full'; end if;
+  insert into guild_members(guild_id, user_id) values (g.id, me);
+  perform audit_event(me, 'guild_joined', g.id::text, jsonb_build_object('name', g.name));
+  return g;
+end $$;
+
+-- Sair: se o líder sai, a liderança passa ao membro mais antigo; o último a sair apaga a guild.
+create or replace function public.leave_guild()
+returns void language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); m guild_members; heir uuid;
+begin
+  select * into m from guild_members where user_id = me;
+  if not found then raise exception 'not_in_guild'; end if;
+  delete from guild_members where user_id = me;
+  if m.role = 'lider' then
+    select user_id into heir from guild_members where guild_id = m.guild_id order by joined_at limit 1;
+    if heir is null then
+      delete from guilds where id = m.guild_id;
+    else
+      update guild_members set role = 'lider' where guild_id = m.guild_id and user_id = heir;
+      update guilds set owner_id = heir where id = m.guild_id;
+    end if;
+  end if;
+  perform audit_event(me, 'guild_left', m.guild_id::text, '{}');
+end $$;
+
+create or replace function public.kick_member(p_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); gid uuid;
+begin
+  select guild_id into gid from guild_members where user_id = me and role = 'lider';
+  if gid is null then raise exception 'not_leader'; end if;
+  if p_user = me then raise exception 'not_allowed'; end if;
+  delete from guild_members where guild_id = gid and user_id = p_user;
+  if not found then raise exception 'not_found'; end if;
+  perform audit_event(me, 'guild_kick', p_user::text, jsonb_build_object('guild', gid));
+  perform audit_event(p_user, 'guild_kicked', gid::text, '{}');
+end $$;
+
+create or replace function public.regenerate_invite()
+returns text language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); code text;
+begin
+  update guilds set invite_code = upper(substr(md5(gen_random_uuid()::text), 1, 10))
+  where id = (select guild_id from guild_members where user_id = me and role = 'lider')
+  returning invite_code into code;
+  if code is null then raise exception 'not_leader'; end if;
+  perform audit_event(me, 'guild_invite_reset', me::text, '{}');
+  return code;
+end $$;
+
+create or replace function public.update_guild(p_name text, p_tag text, p_emblem text)
+returns guilds language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); g guilds;
+begin
+  update guilds set name = trim(p_name), tag = upper(trim(p_tag)), emblem = coalesce(nullif(p_emblem, ''), emblem)
+  where id = (select guild_id from guild_members where user_id = me and role = 'lider') returning * into g;
+  if g.id is null then raise exception 'not_leader'; end if;
+  return g;
+end $$;
+
+-- Minha guild + membros com XP da semana/total e confiança (só para membros).
+create or replace function public.my_guild(p_since date)
+returns json language sql stable security definer set search_path = public as $$
+  select case when g.id is null then null else json_build_object(
+    'id', g.id, 'name', g.name, 'tag', g.tag, 'emblem', g.emblem, 'max_members', g.max_members,
+    'invite_code', g.invite_code, 'owner_id', g.owner_id, 'created_at', g.created_at,
+    'my_role', me.role,
+    'members', (select coalesce(json_agg(x order by x.period_xp desc, x.total_xp desc), '[]'::json) from (
+       select p.id as user_id, p.username, p.hero_class, p.avatar, m.role, m.joined_at,
+              coalesce((select sum(xp) from activities a where a.user_id = p.id), 0) as total_xp,
+              coalesce((select sum(xp) from activities a where a.user_id = p.id and a.day >= p_since), 0) as period_xp,
+              public.trust_score(p.id) as trust
+       from guild_members m join profiles p on p.id = m.user_id where m.guild_id = g.id) x)
+  ) end
+  from guild_members me join guilds g on g.id = me.guild_id
+  where me.user_id = auth.uid();
+$$;
+
 -- Envia pedido pelo código de amigo. Se a outra pessoa já tinha pedido, aceita direto.
 create or replace function public.send_friend_request(p_code text)
 returns text language plpgsql security definer set search_path = public as $$
@@ -759,10 +903,15 @@ begin
       'start_session(text,text,jsonb)', 'cancel_session(uuid)', 'finish_session(uuid,text,int,jsonb,text,jsonb)',
       'log_quick_workout(text,text,int,text,text,uuid)', 'meal_checkin(text,text,uuid)', 'save_health(jsonb)', 'delete_health_data()',
       'add_assessment(jsonb,uuid)', 'review_queue()', 'review_activity(uuid,text,text)', 'trust_score(uuid)',
-      'my_totals()', 'friend_leaderboard(date)', 'send_friend_request(text)'] loop
+      'my_totals()', 'friend_leaderboard(date)', 'send_friend_request(text)',
+      'create_guild(text,text,text)', 'join_guild(text)', 'leave_guild()', 'kick_member(uuid)',
+      'regenerate_invite()', 'update_guild(text,text,text)', 'my_guild(date)', 'my_guild_id()'] loop
     execute format('revoke execute on function public.%s from public, anon', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;
+  -- prévia do convite também para quem ainda não entrou (tela de login mostra a guild)
+  revoke execute on function public.guild_preview(text) from public;
+  grant execute on function public.guild_preview(text) to anon, authenticated;
 end $$;
 
 -- ---------- Row Level Security --------------------------------------------
@@ -782,11 +931,13 @@ alter table public.body_assessments enable row level security;
 alter table public.exercise_logs    enable row level security;
 alter table public.daily_checkins   enable row level security;
 alter table public.lab_results      enable row level security;
+alter table public.guilds           enable row level security;
+alter table public.guild_members    enable row level security;
 
 -- profiles
 drop policy if exists profiles_select on public.profiles;
 create policy profiles_select on public.profiles for select to authenticated using (
-  id = auth.uid() or exists (
+  id = auth.uid() or public.are_friends(auth.uid(), id) or exists (
     select 1 from friendships f
     where (f.requester = auth.uid() and f.addressee = profiles.id)
        or (f.addressee = auth.uid() and f.requester = profiles.id))
@@ -858,6 +1009,14 @@ create policy checkins_all on public.daily_checkins for all to authenticated
 drop policy if exists labs_all on public.lab_results;
 create policy labs_all on public.lab_results for all to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- guilds: só membros leem; escrita só pelas RPCs
+drop policy if exists guilds_select on public.guilds;
+create policy guilds_select on public.guilds for select to authenticated
+  using (id = public.my_guild_id());
+drop policy if exists guild_members_select on public.guild_members;
+create policy guild_members_select on public.guild_members for select to authenticated
+  using (guild_id = public.my_guild_id());
 
 -- Storage: cada um envia só na própria pasta; dono e aliados veem; ninguém altera/apaga.
 drop policy if exists evidence_insert on storage.objects;

@@ -147,6 +147,45 @@ await as(A, `insert into daily_checkins(user_id, day, data) values ($1, current_
 await as(A, `insert into lab_results(taken_on, values) values (current_date, '{"vitd":{"v":18}}')`);
 expect('Aliado NÃO vê check-in, exames nem cargas', (await as(B, `select * from daily_checkins`)).length === 0 && (await as(B, `select * from lab_results`)).length === 0 && (await as(B, `select * from exercise_logs`)).length === 0);
 await expectErr('Não grava check-in em nome de outro', () => as(B, `insert into daily_checkins(user_id, day, data) values ($1, current_date, '{}')`, [A]), /row-level security/i);
+
+// ---- guilds (convite, aliança automática, liderança)
+const D = '44444444-4444-4444-4444-444444444444', E = '55555555-5555-5555-5555-555555555555', F = '66666666-6666-6666-6666-666666666666';
+await su(`insert into auth.users values ('${D}'),('${E}'),('${F}')`);
+for (const [u, n] of [[D, 'dani'], [E, 'enzo'], [F, 'fabi']]) await as(u, `insert into profiles(id, username) values ($1, $2)`, [u, n]);
+const gd = (await as(D, `select * from create_guild('Lobos de CG', 'cgpb', 'wolf')`))[0];
+expect('Criar guild: TAG em maiúsculas e líder', gd.tag === 'CGPB' && (await su(`select role from guild_members where user_id=$1`, [D]))[0].role === 'lider');
+await expectErr('Uma guild por pessoa', () => as(D, `select create_guild('Outra', 'XX')`), /already_in_guild/);
+await expectErr('TAG inválida recusada', () => as(F, `select create_guild('Guild F', 'a!')`), /check constraint|violates/i);
+expect('Quem não é membro não vê a guild nem os membros', (await as(E, `select * from guilds`)).length === 0 && (await as(E, `select * from guild_members`)).length === 0);
+await db.exec(`reset role; select set_config('request.jwt.claim.sub', '', false); set role anon;`);
+const prev = (await db.query(`select guild_preview($1) p`, [gd.invite_code])).rows[0].p; await db.exec('reset role');
+expect('Prévia do convite funciona sem login', prev?.name === 'Lobos de CG' && prev.members === 1 && prev.leader === 'dani', JSON.stringify(prev));
+await expectErr('Código de convite errado', () => as(E, `select join_guild('XXXXXXXXXX')`), /invite_invalid/);
+await as(E, `select join_guild($1)`, [gd.invite_code.toLowerCase()]);
+await as(E, `select join_guild($1)`, [gd.invite_code]);
+expect('Entrar pelo convite (idempotente)', (await su(`select count(*)::int n from guild_members where guild_id=$1`, [gd.id]))[0].n === 2);
+await expectErr('Cliente NÃO se insere direto em guild', () => as(F, `insert into guild_members(guild_id, user_id) values ($1, $2)`, [gd.id, F]), /row-level security/i);
+const [qd] = await as(D, `insert into quests(title, attr, xp) values ('Água','VIT',20) returning id`);
+await as(D, `select complete_quest($1)`, [qd.id]);
+expect('Membro da guild vira aliado: vê perfil e atividades', (await as(E, `select * from profiles where id=$1`, [D])).length === 1 && (await as(E, `select * from activities where user_id=$1`, [D])).length === 2); // missão + bônus Dia Perfeito
+expect('Membro aparece no ranking de aliados', (await as(D, `select * from friend_leaderboard(current_date - 7)`)).some((r) => r.user_id === E));
+const mg = (await as(E, `select my_guild(current_date - 7) g`))[0].g;
+expect('my_guild: membros, XP e papel', mg.members.length === 2 && mg.my_role === 'membro' && mg.members[0].username === 'dani' && Number(mg.members[0].period_xp) === 70, JSON.stringify(mg.members.map((m) => m.username + ':' + m.period_xp)));
+await expectErr('Membro comum não expulsa', () => as(E, `select kick_member($1)`, [D]), /not_leader/);
+await as(D, `select kick_member($1)`, [E]);
+expect('Expulso perde a aliança', (await as(E, `select * from activities where user_id=$1`, [D])).length === 0);
+const code2 = (await as(D, `select regenerate_invite() c`))[0].c;
+await expectErr('Link antigo para de valer após trocar', () => as(F, `select join_guild($1)`, [gd.invite_code]), /invite_invalid/);
+await as(E, `select join_guild($1)`, [code2]);
+await as(D, `select leave_guild()`);
+expect('Líder sai → liderança passa ao membro mais antigo', (await su(`select owner_id from guilds where id=$1`, [gd.id]))[0].owner_id === E && (await su(`select role from guild_members where user_id=$1`, [E]))[0].role === 'lider');
+await su(`update guilds set max_members = 2 where id=$1`, [gd.id]);
+await as(D, `select join_guild($1)`, [code2]);
+await expectErr('Guild cheia recusa novos membros', () => as(F, `select join_guild($1)`, [code2]), /guild_full/);
+await as(D, `select leave_guild()`); await as(E, `select leave_guild()`);
+expect('Último a sair apaga a guild', (await su(`select count(*)::int n from guilds where id=$1`, [gd.id]))[0].n === 0);
+await db.exec(schema);
+expect('schema.sql pode ser reaplicado em produção (idempotente)', true);
 await as(A, `select delete_health_data()`);
 expect('Revogação LGPD apaga saúde, avaliações, exames e check-ins', (await su(`select (select count(*) from body_assessments where user_id=$1) + (select count(*) from lab_results where user_id=$1) + (select count(*) from daily_checkins where user_id=$1) n`, [A]))[0].n == 0);
 
