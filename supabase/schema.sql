@@ -231,7 +231,7 @@ returns date language sql stable security definer set search_path = public as $$
 $$;
 
 create or replace function public.profiles_tz_guard()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public, pg_catalog as $$
 begin
   if not exists (select 1 from pg_timezone_names where name = new.tz) then
     new.tz := 'America/Sao_Paulo';
@@ -255,7 +255,7 @@ returns int language sql stable security definer set search_path = public as $$
 $$;
 
 create or replace function public.intensity_mult(p text)
-returns numeric language sql immutable as $$
+returns numeric language sql immutable set search_path = public, pg_catalog as $$
   select case p when 'leve' then 1.0 when 'moderada' then 1.5 when 'intensa' then 2.2 end;
 $$;
 
