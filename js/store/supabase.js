@@ -224,7 +224,7 @@ export async function createSupabaseStore({ url, key }) {
     async feed(limit = 40) {
       const rows = unwrap(await sb.from('activities')
         .select(`id,user_id,kind,title,attr,xp,day,created_at,meta,status,flags,proof_ids,
-                 profile:profiles(${PROFILE_COLS}), kudos(user_id)`)
+                 profile:profiles!activities_user_id_fkey(${PROFILE_COLS}), kudos(user_id)`)
         .neq('kind', 'assessment')
         .order('created_at', { ascending: false }).limit(limit));
       return rows.map((r) => ({

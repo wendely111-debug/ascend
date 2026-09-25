@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/unit.test.mjs && node tests/antifraude.sql.test.mjs"
+    "test": "node tests/unit.test.mjs && node tests/antifraude.sql.test.mjs",
+    "test:online": "bash tests/api-ao-vivo.sh"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.2.17"

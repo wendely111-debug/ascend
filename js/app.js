@@ -217,11 +217,17 @@ async function loadGuild() {
   if (state.store.mode !== 'online' || g.loading) return;
   g.loading = true; g.error = ''; render();
   try {
-    const [board, feed, fr] = await Promise.all([
+    const [board, feed, fr] = await Promise.allSettled([
       state.store.leaderboard(weekStart()), state.store.feed(), state.store.friendships(),
     ]);
-    Object.assign(g, { board, feed, fr, loaded: true });
-    state.allyCount = fr.allies.length;
+    const val = (r, fallback) => (r.status === 'fulfilled' ? r.value : fallback);
+    Object.assign(g, {
+      board: val(board, []), feed: val(feed, []), fr: val(fr, { allies: [], incoming: [], outgoing: [] }), loaded: true,
+      errors: { ranking: board.reason?.message, feed: feed.reason?.message, allies: fr.reason?.message },
+    });
+    state.allyCount = g.fr.allies.length;
+    const failed = [board, feed, fr].filter((r) => r.status === 'rejected');
+    if (failed.length === 3) g.error = failed[0].reason?.message ?? 'Falha ao carregar a guilda.';
   } catch (e) {
     g.error = e.message;
   } finally {

@@ -20,7 +20,11 @@ export function renderGuild({ state }) {
   let body;
   if (g.error) body = `<p class="panel error-box">${esc(g.error)}</p>`;
   else if (!g.loaded) body = `<div class="panel skeleton"></div><div class="panel skeleton"></div>`;
-  else body = g.tab === 'ranking' ? ranking(state) : g.tab === 'feed' ? feed(g.feed) : allies(state);
+  else {
+    const err = g.errors?.[g.tab === 'allies' ? 'allies' : g.tab];
+    body = err ? `<p class="panel error-box">Não foi possível carregar esta aba: ${esc(err)}. Toque em atualizar.</p>`
+      : g.tab === 'ranking' ? ranking(state) : g.tab === 'feed' ? feed(g.feed) : allies(state);
+  }
 
   return `<section class="view-guild">
     <header class="view-head"><div class="kicker">[ GUILDA ]</div><h1 class="view-title">Você e seus aliados</h1>
