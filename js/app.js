@@ -29,6 +29,9 @@ import { suggestLoad, mesocycle, periodizeSets, parseReps } from './progression.
 import * as T from './timer.js';
 import { buildRoutine, routineToAlarms, DEFAULT_ROUTINE } from './routine.js';
 import { buildCheckup, checkupText } from './checkup.js';
+import { connectHeartRate, connectScale, bluetoothError } from './bluetooth.js';
+import { hrChart } from './views/live.js';
+import { hrZones } from './guide.js';
 import { clock, timerPill } from './views/timer.js';
 import { findPreset } from './routines.js';
 
@@ -72,7 +75,9 @@ const state = {
   diet: { tab: 'hoje', swaps: {}, got: {} },
   audit: { log: [], queue: [], loading: false },
   wiz: null, // assistente de avaliação
-  healthTab: 'hoje',
+  healthTab: 'vivo',
+  weighins: [], // pesagens rápidas (30 dias)
+  live: { hr: null, scale: null, motion: null },
   checkins: {}, // { 'YYYY-MM-DD': {day, data} }
   labs: [], // exames (mais recente primeiro)
   exlogs: [], // cargas registradas
@@ -220,6 +225,7 @@ async function loadGame() {
     s.listQuests(), s.listActivities(since), s.totals(), s.listRoutines(), s.getHealth(), s.listAssessments(),
     s.listCheckins(addDays(dayKey(), -30)), s.listLabs(), s.listExerciseLogs(since),
   ]);
+  state.weighins = await s.listWeighIns(new Date(Date.now() - 45 * 86400000).toISOString()).catch(() => []);
   state.checkins = Object.fromEntries(checkins.map((c) => [c.day, c]));
   if (!quests.length && !localStorage.getItem(`ascend:seeded:${state.profile.id}`)) {
     quests = await s.saveQuests(DEFAULT_QUESTS.map((q, i) => ({ ...q, sort: i })));
@@ -611,6 +617,74 @@ function downloadFile(name, text, type) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// ---- Painel ao vivo: frequência cardíaca, balança, movimento --------------------------------
+function onBpm(bpm) {
+  const hr = state.live.hr;
+  if (!hr) return;
+  hr.bpm = bpm; hr.n += 1; hr.sum += bpm; hr.min = Math.min(hr.min, bpm); hr.max = Math.max(hr.max, bpm);
+  hr.samples.push(bpm); if (hr.samples.length > 120) hr.samples.shift();
+  const bpmEl = document.querySelector('[data-live-bpm]');
+  if (!bpmEl) { if (state.view === 'health' && state.healthTab === 'vivo') render(); return; } // 1º batimento: monta o painel
+  bpmEl.textContent = bpm;
+  const an = derive().analysis;
+  const z = hrZones(an?.age ?? 30, state.guide.restHr);
+  const zone = z.zones.find((x) => bpm >= x.lo && bpm <= x.hi) ?? (bpm > z.max * 0.9 ? z.zones[4] : null);
+  const zEl = document.querySelector('[data-live-zone]');
+  if (zEl) zEl.textContent = zone ? `Zona ${zone.n} · ${zone.name}` : 'Abaixo da zona 1 (repouso)';
+  const box = document.querySelector('.hr-live');
+  if (box) box.style.setProperty('--zc', zone ? ['#7b8cae', '#3dff9a', '#ffc53d', '#ff8a3d', '#ff3d71'][zone.n - 1] : 'var(--cyan)');
+  const ch = document.querySelector('[data-live-hrchart]'); if (ch) ch.innerHTML = hrChart(hr.samples, z.max);
+  const st = document.querySelector('[data-live-hrstats]'); if (st) st.textContent = `mín ${hr.min} · méd ${Math.round(hr.sum / hr.n)} · máx ${hr.max} · ${hr.name}`;
+}
+
+async function onScale(kg) {
+  const sc = state.live.scale;
+  if (!sc || Date.now() - sc.lastSaved < 60000) return; // balanças repetem a leitura: grava 1×/min
+  sc.lastSaved = Date.now();
+  try {
+    state.weighins.unshift(await state.store.addWeighIn(kg, 'bluetooth'));
+    toast(`Balança: <b>${String(kg).replace('.', ',')} kg</b> registrado.`, { title: 'AO VIVO', type: 'gold' });
+    render();
+  } catch (e) { toastError(e); }
+}
+
+function onMotion(e) {
+  const m = state.live.motion;
+  const a = e.accelerationIncludingGravity;
+  if (!m || !a || a.x == null) return;
+  const mag = Math.hypot(a.x, a.y, a.z);
+  const now = performance.now();
+  m.buf.push(mag); if (m.buf.length > 120) m.buf.shift();
+  // passo: pico acima de ~1,2 m/s² sobre a gravidade, com pelo menos 280 ms entre passos
+  if (mag > 11 && !m.above && now - m.lastStep > 280) { m.steps += 1; m.lastStep = now; m.above = true; }
+  if (mag < 10.3) m.above = false;
+}
+
+setInterval(() => {
+  // relógio, contagens regressivas e movimento — só atualiza o texto, sem redesenhar a tela
+  const clock = document.querySelector('[data-live-clock]');
+  if (!clock) return;
+  const now = new Date();
+  clock.textContent = now.toLocaleTimeString('pt-BR');
+  const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+  document.querySelectorAll('[data-live-countdown]').forEach((el) => {
+    let left = Number(el.dataset.liveCountdown) - nowMin; if (left < 0) left += 1440;
+    el.textContent = `em ${Math.floor(left / 60)}h${String(Math.floor(left % 60)).padStart(2, '0')}`;
+  });
+  document.querySelectorAll('[data-live-since]').forEach((el) => {
+    const min = Math.floor((now - new Date(el.dataset.liveSince)) / 60000);
+    el.textContent = `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}min`;
+  });
+  const m = state.live.motion;
+  if (m?.buf.length > 5) {
+    const mean = m.buf.reduce((s, v) => s + v, 0) / m.buf.length;
+    const sd = Math.sqrt(m.buf.reduce((s, v) => s + (v - mean) ** 2, 0) / m.buf.length);
+    const g = document.querySelector('[data-live-motion]'); if (g) g.style.width = `${Math.min(100, sd * 25)}%`;
+    const it = document.querySelector('[data-live-intensity]'); if (it) it.textContent = sd < 0.3 ? 'Parado' : sd < 1.5 ? 'Leve' : sd < 3.5 ? 'Moderada' : 'Intensa';
+    const stEl = document.querySelector('[data-live-steps]'); if (stEl) stEl.textContent = m.steps;
+  }
+}, 1000);
 
 // ---- Missões e registros ------------------------------------------------------------------
 async function toggleQuest(id) {
@@ -1049,6 +1123,43 @@ const actions = {
     render();
   },
 
+  // --- Ao vivo
+  'bt-hr': async () => {
+    try {
+      const dev = await connectHeartRate((bpm) => onBpm(bpm), () => { state.live.hr = null; render(); toast('Sensor cardíaco desconectado.', { title: 'AO VIVO' }); });
+      state.live.hr = { name: dev.name, dev, bpm: null, samples: [], min: 999, max: 0, sum: 0, n: 0 };
+      toast(`Conectado: <b>${esc(dev.name)}</b>. Aguardando batimentos…`, { title: 'AO VIVO' });
+      render();
+    } catch (e) { toast(esc(bluetoothError(e)), { type: 'error', title: 'BLUETOOTH' }); }
+  },
+  'bt-hr-stop': () => { state.live.hr?.dev.disconnect(); state.live.hr = null; render(); },
+  'bt-scale': async () => {
+    try {
+      const dev = await connectScale((kg) => onScale(kg), () => { state.live.scale = null; render(); });
+      state.live.scale = { name: dev.name, dev, lastSaved: 0 };
+      toast(`Balança <b>${esc(dev.name)}</b> conectada. Suba nela.`, { title: 'AO VIVO' });
+      render();
+    } catch (e) { toast(esc(bluetoothError(e)), { type: 'error', title: 'BLUETOOTH' }); }
+  },
+  'water-add': async (el) => {
+    const day = dayKey();
+    const cur = state.checkins[day]?.data ?? {};
+    const water_ml = Math.max(0, (Number(cur.water_ml) || 0) + Number(el.dataset.ml));
+    state.checkins[day] = await state.store.saveCheckin(day, { ...cur, water_ml });
+    render();
+    const goal = derive().analysis?.water ?? 2500;
+    if (water_ml >= goal && Number(cur.water_ml) < goal) toast('Meta de água do dia batida! 💧', { title: 'HIDRATAÇÃO', type: 'gold' });
+  },
+  'motion-start': async () => {
+    if (typeof DeviceMotionEvent === 'undefined') return toast('Este aparelho não tem sensor de movimento acessível.', { type: 'error' });
+    try { if (typeof DeviceMotionEvent.requestPermission === 'function' && (await DeviceMotionEvent.requestPermission()) !== 'granted') throw new Error('Permissão negada'); }
+    catch (e) { return toast(esc(e.message), { type: 'error' }); }
+    state.live.motion = { on: true, steps: 0, buf: [], lastStep: 0, above: false };
+    window.addEventListener('devicemotion', onMotion);
+    render();
+  },
+  'motion-stop': () => { window.removeEventListener('devicemotion', onMotion); state.live.motion = null; render(); },
+
   // --- Check-up
   'checkup-copy': async () => {
     const d = derive();
@@ -1275,6 +1386,13 @@ const forms = {
     toast(`${esc(s.name)} · ${sets} séries · ${act.meta.minutes} min ${describeResult(act)}`, { title: 'TREINO CONCLUÍDO', type: 'gold', ms: 6000 });
   },
   profile: saveProfile,
+  'weigh-in': async (form) => {
+    const kg = Number(String(new FormData(form).get('kg')).replace(',', '.'));
+    if (!(kg >= 25 && kg <= 350)) throw new Error('Informe um peso entre 25 e 350 kg.');
+    state.weighins.unshift(await state.store.addWeighIn(Math.round(kg * 10) / 10, 'manual'));
+    render();
+    toast(`Pesagem registrada: <b>${String(kg).replace('.', ',')} kg</b>.`, { title: 'CORPO' });
+  },
   'guild-create': async (form) => {
     const f = new FormData(form);
     const g = await state.store.createGuild(String(f.get('name')).trim(), String(f.get('tag')).trim().toUpperCase(), f.get('emblem'));

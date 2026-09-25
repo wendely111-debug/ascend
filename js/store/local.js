@@ -9,7 +9,7 @@ import { idbPut, idbGet, idbClear } from '../idb.js';
 
 const KEY = 'ascend:v1';
 const OFFLINE = 'Recurso social disponível apenas no modo online.';
-const EMPTY = () => ({ profile: null, quests: [], activities: [], routines: [], proofs: [], sessions: [], audit: [], health: null, assessments: [], exlogs: [], checkins: {}, labs: [] });
+const EMPTY = () => ({ profile: null, quests: [], activities: [], routines: [], proofs: [], sessions: [], audit: [], health: null, assessments: [], exlogs: [], checkins: {}, labs: [], weighins: [] });
 
 function load() {
   try { return JSON.parse(localStorage.getItem(KEY)) ?? {}; } catch { return {}; }
@@ -244,6 +244,14 @@ export function createLocalStore() {
     async listLabs() { return [...db.labs].sort((a, b) => b.taken_on.localeCompare(a.taken_on)); },
     async addLab(row) { const r = { ...row, id: uuid(), created_at: now() }; db.labs.push(r); audit('lab_added', r.id); save(); return r; },
     async deleteLab(id) { db.labs = db.labs.filter((l) => l.id !== id); save(); },
+    async listWeighIns(sinceIso) { return (db.weighins ?? []).filter((w) => w.measured_at >= sinceIso).sort((a, b) => b.measured_at.localeCompare(a.measured_at)); },
+    async addWeighIn(kg, source = 'manual') {
+      if (!(kg >= 25 && kg <= 350)) fail('Peso fora da faixa (25 a 350 kg).');
+      const row = { id: uuid(), weight_kg: kg, source, measured_at: now() };
+      (db.weighins ??= []).push(row);
+      save();
+      return row;
+    },
 
     // ---- nutrição e avaliação
     async mealCheckin(slot, title, proofId) {
@@ -271,6 +279,7 @@ export function createLocalStore() {
       db.assessments = [];
       db.labs = [];
       db.checkins = {};
+      db.weighins = [];
       audit('health_deleted', 'local');
       save();
     },

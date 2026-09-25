@@ -5,14 +5,15 @@ import { hrZones, cooper, CONDITIONING, SUPPLEMENTS, WHEY_TYPES, WHEY_CHECKLIST,
 import { weeklyPlan, mesocycle } from '../progression.js';
 import { buildRoutine, DEFAULT_ROUTINE, KINDS } from '../routine.js';
 import { buildCheckup } from '../checkup.js';
+import { renderLive } from './live.js';
 import { MEDS } from '../medications.js';
 
-const TABS = [['hoje', 'Hoje'], ['rotina', 'Rotina'], ['checkup', 'Médicos e exames'], ['exames', 'Exames'], ['guia', 'Condicionamento'], ['suple', 'Suplementos']];
+const TABS = [['vivo', 'Ao vivo'], ['hoje', 'Hoje'], ['rotina', 'Rotina'], ['checkup', 'Médicos e exames'], ['exames', 'Exames'], ['guia', 'Condicionamento'], ['suple', 'Suplementos']];
 const n1 = (v) => String(Math.round(v * 10) / 10).replace('.', ',');
 
 export function renderHealth({ state, d }) {
   const t = state.healthTab;
-  const body = t === 'hoje' ? today(state, d) : t === 'rotina' ? routine(state, d) : t === 'checkup' ? checkup(state, d) : t === 'exames' ? exams(state) : t === 'guia' ? guide(state, d) : supplements(state);
+  const body = t === 'vivo' ? renderLive({ state, d }) : t === 'hoje' ? today(state, d) : t === 'rotina' ? routine(state, d) : t === 'checkup' ? checkup(state, d) : t === 'exames' ? exams(state) : t === 'guia' ? guide(state, d) : supplements(state);
   return `<section class="view-health">
     <header class="view-head"><div class="kicker">[ SAÚDE E PERFORMANCE ]</div><h1 class="view-title">Corpo em dia</h1></header>
     <nav class="tabs" role="tablist">${TABS.map(([id, l]) => `<button role="tab" class="tab ${t === id ? 'active' : ''}" data-act="health-tab" data-tab="${id}">${l}</button>`).join('')}</nav>

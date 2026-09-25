@@ -181,6 +181,13 @@ export async function createSupabaseStore({ url, key }) {
     },
     async addLab(row) { return unwrap(await sb.from('lab_results').insert(row).select().single()); },
     async deleteLab(id) { unwrap(await sb.from('lab_results').delete().eq('id', id)); },
+    async listWeighIns(sinceIso) {
+      return unwrap(await sb.from('weigh_ins').select('id,weight_kg,source,measured_at').eq('user_id', uid)
+        .gte('measured_at', sinceIso).order('measured_at', { ascending: false }).limit(500));
+    },
+    async addWeighIn(kg, source = 'manual') {
+      return unwrap(await sb.from('weigh_ins').insert({ weight_kg: kg, source }).select('id,weight_kg,source,measured_at').single());
+    },
     logQuickWorkout: ({ title, attr, minutes, intensity, note, proofId }) =>
       rpc('log_quick_workout', { p_title: title, p_attr: attr, p_minutes: minutes, p_intensity: intensity, p_note: note ?? null, p_proof: proofId ?? null }),
     mealCheckin: (slot, title, proofId) => rpc('meal_checkin', { p_slot: slot, p_title: title, p_proof: proofId }),

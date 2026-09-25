@@ -810,6 +810,33 @@ button.st[disabled] { cursor: default; }
 .invite-hint { margin-bottom: 12px; }
 @media (max-width: 420px) { .guild-week { justify-items: start; width: 100%; } }
 
+.live-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; font: 700 .75rem var(--font-hud); letter-spacing: .16em; }
+.live-top .small { letter-spacing: 0; font-family: var(--font-body); font-weight: 500; }
+.live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 10px var(--bad); animation: pulse 1.2s infinite; }
+.live-card { display: grid; gap: 10px; align-content: start; }
+.live-weight { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.live-weight > b { font-size: clamp(2.6rem, 11vw, 3.6rem); color: #fff; text-shadow: 0 0 18px rgba(0,229,255,.5); }
+.delta { font-weight: 700; font-size: .9rem; padding: 2px 8px; border: 1px solid currentColor; }
+.delta.down { color: var(--good); } .delta.up { color: var(--gold); }
+.weigh-form { grid-template-columns: 1fr auto; }
+.hr-live { --zc: var(--cyan); display: flex; align-items: baseline; gap: 10px; color: var(--zc); }
+.hr-live > b { font-size: clamp(3rem, 14vw, 4.4rem); color: #fff; text-shadow: 0 0 22px var(--zc); line-height: 1; }
+.hr-heart .ico { width: 34px; height: 34px; animation: pulse .9s infinite; filter: drop-shadow(0 0 8px var(--zc)); }
+.hr-zone { margin: 0; font: 800 .8rem var(--font-hud); letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+.hr-chart .spark { height: 70px; }
+.energy { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.energy > div { display: grid; padding: 8px 10px; border: 1px solid var(--line); }
+.energy span { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.energy b { font-size: 1.4rem; }
+.mini-macros { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; font-size: .85rem; }
+.water { display: flex; align-items: baseline; gap: 8px; }
+.water b { font-size: 2.4rem; color: var(--cyan); text-shadow: 0 0 14px rgba(0,229,255,.5); }
+.next-ev { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line-strong); background: rgba(0,229,255,.05); }
+.next-ev > div { flex: 1; display: grid; }
+.next-ev > b { color: var(--gold); }
+.motion-gauge { height: 14px; background: rgba(0,229,255,.07); border: 1px solid var(--line); overflow: hidden; }
+.motion-gauge i { display: block; height: 100%; background: linear-gradient(90deg, var(--good), var(--gold), var(--bad)); transition: width .4s; }
+
 /* ---- Dieta ------------------------------------------------------------------------------------- */
 .targets { display: grid; gap: 10px; margin-bottom: 14px; }
 .mbar-head { display: flex; justify-content: space-between; font-size: .9rem; font-weight: 600; margin-bottom: 4px; }

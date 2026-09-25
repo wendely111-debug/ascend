@@ -22,7 +22,7 @@ export function activityKcal(a, weight) {
 
 /** Prontidão 0–100. */
 export function readiness(c) {
-  if (!c) return null;
+  if (!c || c.sleep_h == null || c.sleep_h === '') return null; // registro só de água não é check-in
   const sleep = Math.min(40, (Math.min(Number(c.sleep_h) || 0, 9) / 8) * 40) - (c.sleep_h > 10 ? 5 : 0);
   const q = ((Number(c.sleep_q) || 3) - 1) / 4;
   const e = ((Number(c.energy) || 3) - 1) / 4;
