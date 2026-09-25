@@ -1124,3 +1124,10 @@ legend { font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transf
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Fichas prontas: academia × em casa */
+.place-row { margin: 0 0 .6rem; }
+.place-row .fchip { display: inline-flex; align-items: center; gap: .35rem; }
+.place-row .fchip svg { width: 15px; height: 15px; }
+.routine-need { display: flex; gap: .4rem; align-items: flex-start; color: var(--text-2, #9fb3c8); margin: .25rem 0 .4rem; }
+.routine-need svg { width: 14px; height: 14px; flex: none; margin-top: 2px; color: var(--cyan, #00e5ff); }

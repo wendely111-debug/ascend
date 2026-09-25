@@ -64,7 +64,7 @@ const state = {
   pending: new Set(),
   guild: { tab: 'guild', my: null, period: 'week', loaded: false, loading: false, error: '', board: [], feed: [], fr: null },
   routines: [],
-  training: { tab: 'fichas', ...libDefaults() },
+  training: { tab: 'fichas', place: 'academia', ...libDefaults() },
   picker: null,
   draft: null,
   questDraft: null,
@@ -859,6 +859,7 @@ const actions = {
   },
 
   // --- Treinos / biblioteca
+  'preset-place': (el) => { state.training.place = el.dataset.v; render(); },
   'training-tab': async (el) => {
     state.training.tab = el.dataset.tab;
     render();

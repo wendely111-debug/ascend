@@ -14,6 +14,9 @@ import { hrZones, cooper, wheyCost } from '../js/guide.js';
 import { medEffects } from '../js/medications.js';
 import { questRow } from '../js/store/supabase.js';
 import { DEFAULT_QUESTS } from '../js/game.js';
+import { PRESET_ROUTINES, PLACES } from '../js/routines.js';
+import { PT } from '../js/exercises.js';
+import { readFileSync } from 'node:fs';
 
 let ok = 0, fail = 0;
 const t = (name, fn) => {
@@ -196,6 +199,17 @@ t('Missões padrão: lote com as MESMAS colunas (PostgREST PGRST102)', () => {
   const keys = DEFAULT_QUESTS.map((q, i) => Object.keys(questRow({ ...q, sort: i })).sort().join(','));
   assert.equal(new Set(keys).size, 1, keys.join(' | '));
   assert.equal(questRow(DEFAULT_QUESTS[4]).exercise_id, null);
+});
+
+t('Fichas prontas: academia e casa, exercícios existentes, com foto e tradução', () => {
+  const db = new Set(JSON.parse(readFileSync(new URL('../data/exercises.json', import.meta.url))).map((e) => e.id));
+  assert.equal(new Set(PRESET_ROUTINES.map((r) => r.id)).size, PRESET_ROUTINES.length, 'ids repetidos');
+  for (const r of PRESET_ROUTINES) {
+    assert.ok(PLACES[r.place], `${r.id} sem place`);
+    for (const i of r.items) { assert.ok(db.has(i.ex), `${r.id}: ${i.ex} não existe`); assert.ok(PT[i.ex], `${r.id}: ${i.ex} sem PT`); }
+  }
+  const casa = PRESET_ROUTINES.filter((r) => r.place === 'casa');
+  assert.ok(casa.length >= 6 && casa.every((r) => r.need));
 });
 
 console.log(`\n${ok} OK · ${fail} FALHAS (unitários)`);

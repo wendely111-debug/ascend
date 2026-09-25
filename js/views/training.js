@@ -4,7 +4,7 @@ import {
   PT, EQUIPMENT, MUSCLES, LEVELS, CATEGORIES, GROUPS, EQ_FILTERS,
   exImg, exName, exMachine, getExercise, searchExercises, exercisesLoaded,
 } from '../exercises.js';
-import { PRESET_ROUTINES } from '../routines.js';
+import { PRESET_ROUTINES, PLACES } from '../routines.js';
 import { icon } from '../ui/icons.js';
 import { renderTimer } from './timer.js';
 import { fmtKg, e1rm } from '../progression.js';
@@ -53,6 +53,7 @@ function routineCard(r, preset) {
     <div class="routine-body">
       <h3 class="routine-name">${esc(r.name)}</h3>
       <p class="muted small">${esc(r.desc || `${r.items.length} exercícios`)}</p>
+      ${r.need ? `<p class="routine-need small">${icon('dumbbell')} <span>${esc(r.need)}</span></p>` : ''}
       <div class="routine-meta small"><span>${r.items.length} exercícios</span><span>${sets} séries</span>${r.level ? `<span>${esc(r.level)}</span>` : ''}${preset ? '' : '<span class="good">minha</span>'}</div>
       <div class="btn-row">
         <button class="btn btn-sm" data-act="routine-start" data-id="${r.id}" ${r.items.length ? '' : 'disabled'}>${icon('bolt')} Iniciar</button>
@@ -63,12 +64,16 @@ function routineCard(r, preset) {
 }
 
 function fichas(state) {
+  const place = state.training.place || 'academia';
   return `<h2 class="section-title">Minhas fichas</h2>
     ${state.routines.length ? `<div class="routine-grid">${state.routines.map((r) => routineCard(r, false)).join('')}</div>`
       : '<p class="muted small">Monte sua própria ficha ou copie uma pronta para ajustar séries e cargas.</p>'}
     <div class="btn-row"><button class="btn btn-ghost" data-act="routine-new">${icon('plus')} Nova ficha</button></div>
     <h2 class="section-title">Fichas prontas</h2>
-    <div class="routine-grid">${PRESET_ROUTINES.map((r) => routineCard(r, true)).join('')}</div>`;
+    <div class="chip-row place-row" role="tablist">${Object.entries(PLACES).map(([k, label]) =>
+      `<button class="fchip ${place === k ? 'on' : ''}" data-act="preset-place" data-v="${k}" aria-pressed="${place === k}">${k === 'casa' ? icon('home') : icon('dumbbell')} ${label}</button>`).join('')}</div>
+    ${place === 'casa' ? '<p class="muted small">Mesma lógica das fichas de academia (A/B/C, iniciante, core e cardio), adaptada para casa com peso do corpo e objetos do dia a dia. Toque em um exercício para ver as fotos e a execução.</p>' : ''}
+    <div class="routine-grid">${PRESET_ROUTINES.filter((r) => r.place === place).map((r) => routineCard(r, true)).join('')}</div>`;
 }
 
 // ---- Biblioteca -------------------------------------------------------------
@@ -154,11 +159,12 @@ export function chooseRoutineModal(exId, routines) {
 export function routineDetail(r, preset) {
   return `<h3 class="modal-title">${esc(r.name)}</h3>
     ${r.desc ? `<p class="muted">${esc(r.desc)}</p>` : ''}
+    ${r.need ? `<p class="routine-need small">${icon('dumbbell')} <span><b>Você vai precisar:</b> ${esc(r.need)}</span></p>` : ''}
     <ol class="routine-list">${r.items.map((i, n) => `<li>
       <button class="routine-item" data-act="ex-detail" data-id="${esc(i.ex)}">
         <span class="routine-n">${n + 1}</span>${exPhoto(i.ex, { size: 'thumb' })}
         <span class="routine-item-body"><b>${esc(exName(i.ex, i.name))}</b>
-          <small class="muted">${esc(exMachine(i.ex))}</small>
+          <small class="muted">${esc(i.m || exMachine(i.ex))}</small>
           <small><span class="mono">${i.sets}×${esc(i.reps)}</span> · descanso ${i.rest}s</small></span>
         ${icon('eye')}</button></li>`).join('')}</ol>
     <div class="modal-actions">
