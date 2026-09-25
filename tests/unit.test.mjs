@@ -17,6 +17,7 @@ import { DEFAULT_QUESTS } from '../js/game.js';
 import { PRESET_ROUTINES, PLACES } from '../js/routines.js';
 import { PT } from '../js/exercises.js';
 import { readFileSync } from 'node:fs';
+import { pendingSleep, sleepHours, bedtimeFor, fmtSleep, sleepVerdict } from '../js/sleep.js';
 
 let ok = 0, fail = 0;
 const t = (name, fn) => {
@@ -210,6 +211,22 @@ t('Fichas prontas: academia e casa, exercícios existentes, com foto e traduçã
   }
   const casa = PRESET_ROUTINES.filter((r) => r.place === 'casa');
   assert.ok(casa.length >= 6 && casa.every((r) => r.need));
+});
+
+t('Sono: indo dormir → acordei (virada do dia, arredondamento, pendência)', () => {
+  const bed = new Date(2026, 8, 24, 23, 10), wake = new Date(2026, 8, 25, 6, 27);
+  assert.equal(sleepHours(bed.toISOString(), wake), 7.25);
+  assert.equal(fmtSleep(7.25), '7h15');
+  const ck = { '2026-09-24': { data: { bed_at: bed.toISOString(), sleep_h: 6 } } };
+  assert.deepEqual(pendingSleep(ck, wake), { day: '2026-09-24', bedAt: bed.toISOString() });
+  ck['2026-09-24'].data.bed_done = true;
+  assert.equal(pendingSleep(ck, wake), null, 'depois de acordar não fica pendente');
+  const old = { '2026-09-24': { data: { bed_at: new Date(2026, 8, 24, 1, 0).toISOString() } } };
+  assert.equal(pendingSleep(old, new Date(2026, 8, 25, 22, 0)), null, 'mais de 20 h: esquecido, não prende o app em modo sono');
+  assert.equal(bedtimeFor('06:30', 8), '22:30');
+  assert.equal(bedtimeFor('07:00', 7.5), '23:30');
+  assert.equal(sleepVerdict(5.5).cls, 'bad');
+  assert.equal(sleepVerdict(8).cls, 'good');
 });
 
 console.log(`\n${ok} OK · ${fail} FALHAS (unitários)`);

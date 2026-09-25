@@ -6,6 +6,7 @@ import { STATUS, FLAGS, SUSPICIOUS } from '../rules.js';
 import { ACHIEVEMENTS } from '../game.js';
 import { trustBadge } from './audit.js';
 import { PENDING_LABELS } from './assessment.js';
+import { sleepCard } from './sleep.js';
 
 const KIND_ICON = { workout: 'dumbbell', bonus: 'star', meal: 'food', assessment: 'scale', quest: 'check' };
 
@@ -69,6 +70,8 @@ export function renderStatus({ state, d }) {
         <button class="btn btn-sm btn-ghost" data-act="go" data-view="achievements">${icon('trophy')} Conquistas ${d.unlocked.size}/${ACHIEVEMENTS.length}</button>
       </div>
     </article>
+
+    ${sleepCard(state, { cls: 'span-3' })}
 
     ${state.health?.data?.pending?.length ? `<article class="panel span-3 reassess pending-card">${icon('eye')}<div><b>Avaliação incompleta — resultados imprecisos</b>
       <p class="muted small">Faltam: ${state.health.data.pending.map((k) => esc(PENDING_LABELS[k] ?? k)).join(', ')}. Suas metas e seu cardápio são estimativas até você completar.</p></div>

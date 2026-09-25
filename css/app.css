@@ -1131,3 +1131,18 @@ legend { font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transf
 .place-row .fchip svg { width: 15px; height: 15px; }
 .routine-need { display: flex; gap: .4rem; align-items: flex-start; color: var(--text-2, #9fb3c8); margin: .25rem 0 .4rem; }
 .routine-need svg { width: 14px; height: 14px; flex: none; margin-top: 2px; color: var(--cyan, #00e5ff); }
+
+/* Sono: Estou indo dormir / Acordei */
+.sleep-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .8rem 1rem; margin-bottom: 1rem; }
+.sleep-card .sleep-head { display: flex; gap: .75rem; align-items: center; min-width: 0; flex: 1 1 240px; }
+.sleep-card .sleep-head > svg { width: 30px; height: 30px; flex: none; color: #9d8cff; filter: drop-shadow(0 0 6px rgba(157,140,255,.6)); }
+.sleep-card .sleep-head b { display: block; font-family: var(--font-hud); font-size: 1rem; letter-spacing: .03em; }
+.sleep-card .sleep-head small { display: block; margin-top: .15rem; }
+.sleep-card .btn-row { margin: 0; flex: 0 1 auto; }
+.sleep-btn { display: inline-flex; align-items: center; gap: .45rem; padding: .8rem 1.2rem; font-size: 1rem; }
+.sleep-btn svg { width: 20px; height: 20px; }
+.sleep-card.sleeping { border-color: rgba(157,140,255,.55); background: linear-gradient(135deg, rgba(40,28,90,.55), var(--panel)); box-shadow: 0 0 24px rgba(157,140,255,.18) inset; }
+.sleep-btn.wake { background: var(--gold); color: #1a1200; border-color: var(--gold); box-shadow: 0 0 18px rgba(255,197,61,.45); }
+.sleep-card .warn { color: var(--gold); }
+.sleep-card .bad { color: var(--bad); }
+@media (max-width: 520px) { .sleep-card .btn-row, .sleep-btn { width: 100%; } .sleep-btn { justify-content: center; } }

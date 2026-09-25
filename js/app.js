@@ -5,6 +5,7 @@ import {
 import { RULES, FLAGS, STATUS, quickOutcome, trustScore } from './rules.js';
 import { createStore } from './store/index.js';
 import { icon } from './ui/icons.js';
+import { pendingSleep, sleepHours, fmtSleep, sleepVerdict, SLEEP_MIN_H, SLEEP_MAX_H } from './sleep.js';
 import { avatar, toast, toastError, openModal, updateModal, closeModal, confirmDialog, levelUpOverlay } from './ui/components.js';
 import { captureProof } from './ui/camera.js';
 import { createMotionTracker } from './motion.js';
@@ -663,18 +664,18 @@ function onMotion(e) {
 
 setInterval(() => {
   // relógio, contagens regressivas e movimento — só atualiza o texto, sem redesenhar a tela
+  const now = new Date();
+  document.querySelectorAll('[data-live-since]').forEach((el) => {
+    const min = Math.floor((now - new Date(el.dataset.liveSince)) / 60000);
+    el.textContent = `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}min`;
+  });
   const clock = document.querySelector('[data-live-clock]');
   if (!clock) return;
-  const now = new Date();
   clock.textContent = now.toLocaleTimeString('pt-BR');
   const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
   document.querySelectorAll('[data-live-countdown]').forEach((el) => {
     let left = Number(el.dataset.liveCountdown) - nowMin; if (left < 0) left += 1440;
     el.textContent = `em ${Math.floor(left / 60)}h${String(Math.floor(left % 60)).padStart(2, '0')}`;
-  });
-  document.querySelectorAll('[data-live-since]').forEach((el) => {
-    const min = Math.floor((now - new Date(el.dataset.liveSince)) / 60000);
-    el.textContent = `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}min`;
   });
   const m = state.live.motion;
   if (m?.buf.length > 5) {
@@ -1142,6 +1143,49 @@ const actions = {
       render();
     } catch (e) { toast(esc(bluetoothError(e)), { type: 'error', title: 'BLUETOOTH' }); }
   },
+  // --- Sono: "Estou indo dormir" / "Acordei"
+  'sleep-start': async () => {
+    const day = dayKey();
+    const cur = state.checkins[day]?.data ?? {};
+    const { bed_done: _, ...rest } = cur;
+    state.checkins[day] = await state.store.saveCheckin(day, { ...rest, bed_at: new Date().toISOString() });
+    render();
+    toast('Boa noite! Quando acordar, abra o app e toque em <b>Acordei</b> — as horas de sono entram sozinhas no check-in.', { title: 'MODO SONO' });
+  },
+  'sleep-cancel': async () => {
+    const p = pendingSleep(state.checkins);
+    if (!p) return render();
+    const { bed_at: _, ...rest } = state.checkins[p.day].data;
+    state.checkins[p.day] = await state.store.saveCheckin(p.day, rest);
+    render();
+  },
+  'sleep-wake': async () => {
+    const p = pendingSleep(state.checkins);
+    if (!p) return render();
+    const now = new Date();
+    const h = sleepHours(p.bedAt, now);
+    const bedRow = { ...state.checkins[p.day].data, bed_done: true };
+    if (h < SLEEP_MIN_H) {
+      const { bed_at: _, ...rest } = bedRow;
+      state.checkins[p.day] = await state.store.saveCheckin(p.day, rest);
+      render();
+      return toast('Menos de 15 minutos — registro de sono descartado.', { title: 'SONO' });
+    }
+    if (h > SLEEP_MAX_H) {
+      state.checkins[p.day] = await state.store.saveCheckin(p.day, bedRow);
+      state.view = 'health'; state.healthTab = 'hoje';
+      render();
+      return toast(`Mais de ${SLEEP_MAX_H} h desde que você deitou — parece que esqueceu de tocar em Acordei. Lance as horas no check-in.`, { title: 'SONO', type: 'error' });
+    }
+    const today = dayKey(now);
+    if (p.day !== today) state.checkins[p.day] = await state.store.saveCheckin(p.day, bedRow);
+    const base = p.day === today ? bedRow : (state.checkins[today]?.data ?? {});
+    state.checkins[today] = await state.store.saveCheckin(today, { ...base, sleep_h: h, sleep_from: p.bedAt, wake_at: now.toISOString() });
+    state.view = 'health'; state.healthTab = 'hoje';
+    render();
+    const dt = derive().daily;
+    toast(`Você dormiu <b>${fmtSleep(h)}</b>. ${sleepVerdict(h).txt}<br>Prontidão <b>${dt?.readiness ?? '—'}</b> — complete qualidade do sono, energia e dor muscular no check-in.`, { title: 'BOM DIA' });
+  },
   'water-add': async (el) => {
     const day = dayKey();
     const cur = state.checkins[day]?.data ?? {};
@@ -1420,7 +1464,7 @@ const forms = {
       stress: Number(f.get('stress')) || 3, soreness: Number(f.get('soreness')) || 3, steps: f.get('steps') ? Number(f.get('steps')) : null,
     };
     if (!(data.sleep_h >= 0 && data.sleep_h <= 16)) throw new Error('Informe as horas de sono (0 a 16).');
-    const row = await state.store.saveCheckin(dayKey(), data);
+    const row = await state.store.saveCheckin(dayKey(), { ...(state.checkins[dayKey()]?.data ?? {}), ...data });
     state.checkins[dayKey()] = row;
     render();
     const dt = derive().daily;
