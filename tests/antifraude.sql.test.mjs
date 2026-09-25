@@ -146,6 +146,9 @@ await expectErr('Função interna audit_event bloqueada para o cliente', () => a
 await as(A, `insert into daily_checkins(user_id, day, data) values ($1, current_date, '{"sleep_h":5}')`, [A]);
 await as(A, `insert into lab_results(taken_on, values) values (current_date, '{"vitd":{"v":18}}')`);
 expect('Aliado NÃO vê check-in, exames nem cargas', (await as(B, `select * from daily_checkins`)).length === 0 && (await as(B, `select * from lab_results`)).length === 0 && (await as(B, `select * from exercise_logs`)).length === 0);
+await as(A, `insert into weigh_ins(weight_kg) values (91.4)`);
+await expectErr('Pesagem absurda recusada', () => as(A, `insert into weigh_ins(weight_kg) values (900)`), /check constraint/i);
+expect('Aliado NÃO vê pesagens', (await as(B, `select * from weigh_ins where user_id=$1`, [A])).length === 0 && (await as(A, `select * from weigh_ins`)).length === 1);
 await expectErr('Não grava check-in em nome de outro', () => as(B, `insert into daily_checkins(user_id, day, data) values ($1, current_date, '{}')`, [A]), /row-level security/i);
 
 // ---- guilds (convite, aliança automática, liderança)
@@ -187,7 +190,7 @@ expect('Último a sair apaga a guild', (await su(`select count(*)::int n from gu
 await db.exec(schema);
 expect('schema.sql pode ser reaplicado em produção (idempotente)', true);
 await as(A, `select delete_health_data()`);
-expect('Revogação LGPD apaga saúde, avaliações, exames e check-ins', (await su(`select (select count(*) from body_assessments where user_id=$1) + (select count(*) from lab_results where user_id=$1) + (select count(*) from daily_checkins where user_id=$1) n`, [A]))[0].n == 0);
+expect('Revogação LGPD apaga saúde, avaliações, exames e check-ins', (await su(`select (select count(*) from body_assessments where user_id=$1) + (select count(*) from lab_results where user_id=$1) + (select count(*) from daily_checkins where user_id=$1) + (select count(*) from weigh_ins where user_id=$1) n`, [A]))[0].n == 0);
 
 console.log(`\n${ok} OK · ${fail} FALHAS`);
 process.exit(fail ? 1 : 0);

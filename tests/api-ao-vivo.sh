@@ -17,6 +17,8 @@ q atividades "activities?select=*&user_id=eq.$Z&day=gte.2026-01-01&order=created
 q provas "proofs?select=*&id=in.($Z)"
 q cargas "exercise_logs?select=exercise_id,day,sets,created_at&user_id=eq.$Z&day=gte.2026-01-01"
 q checkins "daily_checkins?select=day,data&user_id=eq.$Z&day=gte.2026-01-01&order=day.desc"
+q pesagens "weigh_ins?select=weight_kg,source,measured_at&user_id=eq.$Z&measured_at=gte.2026-01-01&order=measured_at"
+w weigh_ins '{"weight_kg":80,"source":"manual"}'
 q exames "lab_results?select=*&user_id=eq.$Z&order=taken_on.desc"
 q saude "health_profiles?select=*&user_id=eq.$Z"
 q avaliacoes "body_assessments?select=*&user_id=eq.$Z&order=created_at.desc"

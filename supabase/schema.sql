@@ -219,6 +219,16 @@ create table if not exists public.daily_checkins (
   primary key (user_id, day)
 );
 
+-- Pesagens rápidas do dia a dia (manual ou balança Bluetooth) — só o titular. Não pontuam.
+create table if not exists public.weigh_ins (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references public.profiles on delete cascade,
+  weight_kg   numeric(5,2) not null check (weight_kg between 25 and 350),
+  source      text not null default 'manual' check (source in ('manual','bluetooth')),
+  measured_at timestamptz not null default now()
+);
+create index if not exists weigh_ins_user_idx on public.weigh_ins(user_id, measured_at desc);
+
 -- Exames laboratoriais — dado de saúde sensível, só o titular.
 create table if not exists public.lab_results (
   id         uuid primary key default gen_random_uuid(),
@@ -581,6 +591,7 @@ begin
   delete from health_profiles where user_id = auth.uid();
   delete from lab_results where user_id = auth.uid();
   delete from daily_checkins where user_id = auth.uid();
+  delete from weigh_ins where user_id = auth.uid();
   perform audit_event(auth.uid(), 'health_deleted', auth.uid()::text, '{}');
 end $$;
 
@@ -932,6 +943,7 @@ alter table public.exercise_logs    enable row level security;
 alter table public.daily_checkins   enable row level security;
 alter table public.lab_results      enable row level security;
 alter table public.guilds           enable row level security;
+alter table public.weigh_ins        enable row level security;
 alter table public.guild_members    enable row level security;
 
 -- profiles
@@ -1008,6 +1020,11 @@ create policy checkins_all on public.daily_checkins for all to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 drop policy if exists labs_all on public.lab_results;
 create policy labs_all on public.lab_results for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- pesagens: só o titular (dado de saúde)
+drop policy if exists weigh_ins_all on public.weigh_ins;
+create policy weigh_ins_all on public.weigh_ins for all to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- guilds: só membros leem; escrita só pelas RPCs
