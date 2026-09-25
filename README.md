@@ -4,6 +4,8 @@ Gamificação de treino, nutrição e alta performance com visual de HUD futuris
 faz a avaliação física, recebe metas e cardápio, cumpre missões diárias com **prova ao vivo**, treina
 com carga sugerida, ganha XP, sobe de rank (E → S) e disputa o ranking com aliados que **auditam** uns aos outros.
 
+**🌐 App publicado:** https://wendely111-debug.github.io/ascend/ (modo solo até o Supabase ser configurado)
+
 - **PWA**: instala na tela inicial do iPhone/Android, funciona offline.
 - **100% gratuito**: hospedagem estática (Netlify / GitHub Pages) + Supabase (plano free).
 - **Sem build**: HTML + CSS + JavaScript (ES modules). É só publicar a pasta.
