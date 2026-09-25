@@ -1,6 +1,6 @@
 // Service worker: app shell offline (cache-first) e rede para todo o resto.
 // Suba a versão a cada deploy para os aparelhos pegarem a atualização.
-const VERSION = 'ascend-v5';
+const VERSION = 'ascend-v6';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'data/exercises.json',
   'js/app.js', 'js/config.js', 'js/util.js', 'js/game.js', 'js/exercises.js', 'js/routines.js',
