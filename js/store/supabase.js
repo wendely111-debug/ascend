@@ -40,6 +40,12 @@ function unwrap({ data, error }) {
 
 const PROFILE_COLS = 'id,username,hero_class,avatar';
 
+/** Linha de missão com todas as colunas — lotes do PostgREST exigem as mesmas chaves em todos os objetos. */
+export const questRow = (q) => ({
+  title: q.title, attr: q.attr, target: q.target ?? 1, unit: q.unit ?? '', xp: q.xp, sort: q.sort ?? 0,
+  exercise_id: q.exercise_id || null, require_proof: Boolean(q.require_proof),
+});
+
 export async function createSupabaseStore({ url, key }) {
   const { createClient } = await import(SDK_URL);
   const sb = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true } });
@@ -77,7 +83,11 @@ export async function createSupabaseStore({ url, key }) {
     },
     async createProfile(p) {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      return unwrap(await sb.from('profiles').insert({ id: uid, tz, ...p }).select().single());
+      const res = await sb.from('profiles').insert({ id: uid, tz, ...p }).select().single();
+      if (res.error?.code === '23505' && /profiles_pkey/.test(res.error.message)) {
+        return unwrap(await sb.from('profiles').select('*').eq('id', uid).single()); // já criado antes
+      }
+      return unwrap(res);
     },
     async updateProfile(patch) {
       return unwrap(await sb.from('profiles').update(patch).eq('id', uid).select().single());
@@ -88,14 +98,13 @@ export async function createSupabaseStore({ url, key }) {
       return unwrap(await sb.from('quests').select('*').eq('user_id', uid).order('sort'));
     },
     async saveQuest(q) {
-      const { id, title, attr, target, unit, xp, sort, exercise_id = null, require_proof = false } = q;
-      const row = { title, attr, target, unit, xp, sort, exercise_id, require_proof };
-      return id
-        ? unwrap(await sb.from('quests').update(row).eq('id', id).select().single())
+      const row = questRow(q);
+      return q.id
+        ? unwrap(await sb.from('quests').update(row).eq('id', q.id).select().single())
         : unwrap(await sb.from('quests').insert(row).select().single());
     },
     async saveQuests(list) {
-      return unwrap(await sb.from('quests').insert(list.map(({ id, ...q }) => q)).select());
+      return unwrap(await sb.from('quests').insert(list.map(questRow)).select());
     },
     async deleteQuest(id) { unwrap(await sb.from('quests').delete().eq('id', id)); },
     async listRoutines() {

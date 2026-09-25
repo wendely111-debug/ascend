@@ -12,6 +12,8 @@ import { readiness, dailyTargets } from '../js/readiness.js';
 import { buildCheckup } from '../js/checkup.js';
 import { hrZones, cooper, wheyCost } from '../js/guide.js';
 import { medEffects } from '../js/medications.js';
+import { questRow } from '../js/store/supabase.js';
+import { DEFAULT_QUESTS } from '../js/game.js';
 
 let ok = 0, fail = 0;
 const t = (name, fn) => {

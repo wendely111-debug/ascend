@@ -1424,7 +1424,15 @@ async function boot() {
 
 // Sem SW em localhost para não servir arquivos velhos durante o desenvolvimento.
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // Versão nova publicada → o service worker novo assume e a página recarrega uma vez, já atualizada.
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading || state.session) return; // não interrompe treino em andamento
+    reloading = true;
+    location.reload();
+  });
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {}));
 }
 
 boot();
